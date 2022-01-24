@@ -109,10 +109,10 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 	})
 }
 
-func (c *capturedCall) Complete(err error, peer net.Addr, reply interface{}) {
+func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
 	mtx.Lock()
 	defer mtx.Unlock()
-	if reply != nil {
+	if addReply {
 		c.recordMessageLocked(reply, !c.inbound)
 	}
 	c.duration = time.Now().Sub(c.start)
@@ -132,7 +132,7 @@ func UnaryClientInterceptor(ctx context.Context, method string, req, reply inter
 	var p peer.Peer
 	opts = append(opts, grpc.Peer(&p))
 	err := invoker(ctx, method, req, reply, cc, opts...)
-	c.Complete(err, p.Addr, reply)
+	c.Complete(err, p.Addr, err == nil, reply)
 	return err
 }
 
@@ -149,6 +149,6 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	c.Start(ctx, req)
 	c.Record(info.FullMethod)
 	resp, err := handler(ctx, req)
-	c.Complete(err, nil, resp)
+	c.Complete(err, nil, err == nil, resp)
 	return resp, err
 }
