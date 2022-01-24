@@ -18,6 +18,7 @@ var tpl = template.Must(template.New("").Parse(`
 <html>
 	<head>
 		<title>RPC samples</title>
+		<meta charset="utf-8" />
 		<script type="text/javascript">
 			function showMethod(method) {
 				var slides = document.getElementsByClassName('methodBlock');
