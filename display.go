@@ -51,14 +51,14 @@ var tpl = template.Must(template.New("").Parse(`
 {{ range .Messages }}
 				<tr>
 					<td>{{.Time}}</td>
-					<td align="right">({{.TimeFromPrev}})</td>
+					<td align="right" title="Time since previous message">({{.TimeFromPrev}})</td>
 					<td>{{if .Inbound}}recv{{else}}sent{{end}}: {{.Message}}</td>
 				</tr>
 {{ end }}
 {{ if .Duration }}
 				<tr>
 					<td>{{.End}}</td>
-					<td align="right">({{.Duration}})</td>
+					<td align="right" title="Total duration of the RPC">({{.Duration}})</td>
 					<td><b>{{.StatusCode}}</b>{{if .StatusMessage}}: {{.StatusMessage}}{{end}}</td>
 				</tr>
 {{ end }}
