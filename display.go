@@ -8,6 +8,7 @@ import (
 
 	"github.com/Jille/convreq"
 	"github.com/Jille/convreq/respond"
+	"github.com/Jille/dfr"
 )
 
 var Handler http.Handler = convreq.Wrap(handler)
@@ -100,8 +101,11 @@ func handler(r *http.Request) convreq.HttpResponse {
 	if r.Method != "GET" {
 		return respond.MethodNotAllowed("Method Not Allowed")
 	}
+	var d dfr.D
+	d.Run(nil)
 	data := templateData{}
 	mtx.Lock()
+	unlocker := d.Add(mtx.Unlock)
 	data.Methods = make([]templateMethod, 0, len(perMethod))
 	for m, cfm := range perMethod {
 		meth := templateMethod{
@@ -141,7 +145,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 		}
 		data.Methods = append(data.Methods, meth)
 	}
-	mtx.Unlock()
+	unlocker(true)
 	sort.Slice(data.Methods, func(i, j int) bool {
 		return data.Methods[i].Name < data.Methods[j].Name
 	})

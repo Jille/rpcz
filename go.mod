@@ -4,10 +4,12 @@ go 1.17
 
 require (
 	github.com/Jille/convreq v1.2.0
+	github.com/Jille/dfr v1.0.0
 	google.golang.org/grpc v1.43.0
 )
 
 require (
+	github.com/Jille/errchain v1.0.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/schema v1.2.0 // indirect
