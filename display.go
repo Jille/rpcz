@@ -46,7 +46,7 @@ var tpl = template.Must(template.New("").Parse(`
 				<tr>
 					<td>{{.Start}}</td>
 					<td></td>
-					<td><b>Peer</b>: {{if .Peer}}{{.Peer}}{{else}}?{{end}}  <b>Deadline</b>: {{.Deadline}}</td>
+					<td><b>{{if .Inbound}}Caller{{else}}Recipient{{end}}</b>: {{if .Peer}}{{.Peer}}{{else}}?{{end}}  <b>Deadline</b>: {{.Deadline}}</td>
 				</tr>
 {{ range .Messages }}
 				<tr>
