@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/Jille/convreq"
 	"github.com/Jille/convreq/respond"
@@ -28,6 +29,7 @@ var tpl = template.Must(template.New("").Parse(`
 		</script>
 	</head>
 	<body>
+		<span style="float: right">Times are in {{.Timezone}}</span>
 		<h1>RPC samples</h1>
 		<h2>Choose a method</h2>
 		<ul>
@@ -48,14 +50,14 @@ var tpl = template.Must(template.New("").Parse(`
 {{ range .Messages }}
 				<tr>
 					<td>{{.Time}}</td>
-					<td>({{.TimeFromPrev}})</td>
+					<td align="right">({{.TimeFromPrev}})</td>
 					<td>{{if .Inbound}}recv{{else}}sent{{end}}: {{.Message}}</td>
 				</tr>
 {{ end }}
 {{ if .Duration }}
 				<tr>
 					<td>{{.End}}</td>
-					<td>({{.Duration}})</td>
+					<td align="right">({{.Duration}})</td>
 					<td><b>{{.StatusCode}}</b>{{if .StatusMessage}}: {{.StatusMessage}}{{end}}</td>
 				</tr>
 {{ end }}
@@ -71,7 +73,8 @@ var tpl = template.Must(template.New("").Parse(`
 `))
 
 type templateData struct {
-	Methods []templateMethod
+	Methods  []templateMethod
+	Timezone string
 }
 
 type templateMethod struct {
@@ -102,9 +105,11 @@ func handler(r *http.Request) convreq.HttpResponse {
 	if r.Method != "GET" {
 		return respond.MethodNotAllowed("Method Not Allowed")
 	}
+	now := time.Now()
 	var d dfr.D
 	defer d.Run(nil)
 	data := templateData{}
+	data.Timezone = now.Format("MST")
 	mtx.Lock()
 	unlocker := d.Add(mtx.Unlock)
 	data.Methods = make([]templateMethod, 0, len(perMethod))
@@ -124,8 +129,8 @@ func handler(r *http.Request) convreq.HttpResponse {
 			for j, msg := range c.messages {
 				msgs[j] = templateMessage{
 					Inbound:      msg.inbound,
-					Time:         msg.stamp.Round(0).String(),
-					TimeFromPrev: msg.stamp.Sub(prev).Round(0).String(),
+					Time:         timeToString(now, msg.stamp),
+					TimeFromPrev: msg.stamp.Sub(prev).String(),
 					Message:      msg.message,
 				}
 				prev = msg.stamp
@@ -135,10 +140,10 @@ func handler(r *http.Request) convreq.HttpResponse {
 				p = c.peer.String()
 			}
 			meth.Calls = append(meth.Calls, templateCall{
-				Start:         c.start.Round(0).String(),
-				Deadline:      c.deadline.Round(0).String(),
+				Start:         timeToString(now, c.start),
+				Deadline:      c.deadline.String(),
 				Duration:      c.duration.String(),
-				End:           c.start.Add(c.duration).Round(0).String(),
+				End:           timeToString(now, c.start.Add(c.duration)),
 				StatusCode:    c.status.Code().String(),
 				StatusMessage: c.status.Message(),
 				Peer:          p,
@@ -152,4 +157,12 @@ func handler(r *http.Request) convreq.HttpResponse {
 		return data.Methods[i].Name < data.Methods[j].Name
 	})
 	return respond.RenderTemplate(tpl, data)
+}
+
+func timeToString(now, t time.Time) string {
+	t = t.Round(0)
+	if now.Sub(t) < 12*time.Hour {
+		return t.Format("15:04:05.000000000")
+	}
+	return t.Format("2006-01-02 15:04:05.000000000")
 }
