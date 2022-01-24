@@ -125,13 +125,17 @@ func handler(r *http.Request) convreq.HttpResponse {
 				}
 				prev = msg.stamp
 			}
+			p := "?"
+			if c.peer != nil {
+				p = c.peer.String()
+			}
 			meth.Calls = append(meth.Calls, templateCall{
 				Start:    c.start.Round(0).String(),
 				Deadline: c.deadline.Round(0).String(),
 				Duration: c.duration.String(),
 				End:      c.start.Add(c.duration).Round(0).String(),
 				Status:   c.status.String(),
-				Peer:     c.peer.String(),
+				Peer:     p,
 				Messages: msgs,
 			})
 		}
