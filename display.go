@@ -102,7 +102,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 		return respond.MethodNotAllowed("Method Not Allowed")
 	}
 	var d dfr.D
-	d.Run(nil)
+	defer d.Run(nil)
 	data := templateData{}
 	mtx.Lock()
 	unlocker := d.Add(mtx.Unlock)
