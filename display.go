@@ -56,7 +56,7 @@ var tpl = template.Must(template.New("").Parse(`
 				<tr>
 					<td>{{.End}}</td>
 					<td>({{.Duration}})</td>
-					<td><b>Status</b>: {{.Status}}</td>
+					<td><b>{{.StatusCode}}</b>{{if .StatusMessage}}: {{.StatusMessage}}{{end}}</td>
 				</tr>
 {{ end }}
 				<tr>
@@ -81,13 +81,14 @@ type templateMethod struct {
 }
 
 type templateCall struct {
-	Start    string
-	End      string
-	Deadline string
-	Duration string
-	Status   string
-	Peer     string
-	Messages []templateMessage
+	Start         string
+	End           string
+	Deadline      string
+	Duration      string
+	StatusCode    string
+	StatusMessage string
+	Peer          string
+	Messages      []templateMessage
 }
 
 type templateMessage struct {
@@ -134,13 +135,14 @@ func handler(r *http.Request) convreq.HttpResponse {
 				p = c.peer.String()
 			}
 			meth.Calls = append(meth.Calls, templateCall{
-				Start:    c.start.Round(0).String(),
-				Deadline: c.deadline.Round(0).String(),
-				Duration: c.duration.String(),
-				End:      c.start.Add(c.duration).Round(0).String(),
-				Status:   c.status.String(),
-				Peer:     p,
-				Messages: msgs,
+				Start:         c.start.Round(0).String(),
+				Deadline:      c.deadline.Round(0).String(),
+				Duration:      c.duration.String(),
+				End:           c.start.Add(c.duration).Round(0).String(),
+				StatusCode:    c.status.Code().String(),
+				StatusMessage: c.status.Message(),
+				Peer:          p,
+				Messages:      msgs,
 			})
 		}
 		data.Methods = append(data.Methods, meth)
