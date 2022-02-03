@@ -91,6 +91,7 @@ type templateCall struct {
 	Duration      string
 	StatusCode    string
 	StatusMessage string
+	Inbound       bool
 	Peer          string
 	Messages      []templateMessage
 }
@@ -147,6 +148,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 				End:           timeToString(now, c.start.Add(c.duration)),
 				StatusCode:    c.status.Code().String(),
 				StatusMessage: c.status.Message(),
+				Inbound:       c.inbound,
 				Peer:          p,
 				Messages:      msgs,
 			})
