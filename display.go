@@ -1,9 +1,9 @@
 package rpcz
 
 import (
-	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
 
@@ -35,7 +35,7 @@ var tpl = template.Must(template.New("").Parse(`
 		<h2>Choose a method</h2>
 		<ul>
 {{ range .Methods }}
-			<li><a href="#" onclick="showMethod({{.ID}}); return false;">{{.Name}}</a></li>
+			<li><a href="#{{.ID}}" onclick="showMethod({{.ID}});">{{.Name}}</a></li>
 {{ end }}
 		</ul>
 {{ range .Methods }}
@@ -69,6 +69,12 @@ var tpl = template.Must(template.New("").Parse(`
 			</table>
 		</div>
 {{ end }}
+		<script type="text/javascript">
+			var el = document.getElementById(unescape(document.location.hash.substring(1)));
+			if(el) {
+				el.style.display = 'block';
+			}
+		</script>
 	</body>
 </html>
 `))
@@ -118,7 +124,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 	for m, cfm := range perMethod {
 		meth := templateMethod{
 			Name:  m,
-			ID:    fmt.Sprintf("mth%d", len(data.Methods)),
+			ID:    url.PathEscape(m),
 			Calls: make([]templateCall, 0, RetainRPCsPerMethod),
 		}
 		for i := 0; RetainRPCsPerMethod > i; i++ {
