@@ -15,8 +15,11 @@ import (
 
 var (
 	// SamplingRate is the chance it samples the message.
-	SamplingRate                = 1.0
-	RetainRPCsPerMethod         = 10
+	SamplingRate        = 1.0
+	RetainRPCsPerMethod = 10
+)
+
+const (
 	KeepFirstNStreamingMessages = 5
 	KeepLastNStreamingMessages  = 5
 )
@@ -35,6 +38,12 @@ var (
 var (
 	mtx       sync.Mutex
 	perMethod = map[string]*callForMethod{}
+
+	capturedCallPool = sync.Pool{
+		New: func() interface{} {
+			return &capturedCall{}
+		},
+	}
 )
 
 func sampleCall(method string) bool {
@@ -54,21 +63,24 @@ type callForMethod struct {
 
 // Callers should hold mtx.
 func (cfm *callForMethod) add(c *capturedCall) {
+	if old := cfm.calls[cfm.ptr]; old != nil {
+		*old = capturedCall{}
+		capturedCallPool.Put(old)
+	}
 	cfm.calls[cfm.ptr] = c
 	cfm.ptr = (cfm.ptr + 1) % RetainRPCsPerMethod
 }
 
 type capturedCall struct {
-	inbound         bool
-	huge            bool
-	start           time.Time
-	deadline        time.Duration
-	duration        time.Duration
-	status          *status.Status
-	peer            net.Addr
-	messages        []capturedMessage
-	droppedMessages uint64
-	lastMessages    []capturedMessage
+	inbound      bool
+	huge         bool
+	start        time.Time
+	deadline     time.Duration
+	duration     time.Duration
+	status       *status.Status
+	peer         net.Addr
+	messages     [KeepFirstNStreamingMessages + KeepLastNStreamingMessages]capturedMessage
+	messageCount uint64
 }
 
 type capturedMessage struct {
@@ -113,7 +125,7 @@ func (c *capturedCall) RecordMessage(msg interface{}, inbound bool) {
 
 func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 	if c.huge {
-		c.droppedMessages++
+		c.messageCount++
 		return
 	}
 	var m string
@@ -127,18 +139,43 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 		stamp:   time.Now(),
 		message: m,
 	}
-	if len(c.messages) < KeepFirstNStreamingMessages {
-		c.messages = append(c.messages, cm)
-	} else if len(c.lastMessages) < KeepLastNStreamingMessages {
-		c.lastMessages = append(c.lastMessages, cm)
+	if c.messageCount < KeepFirstNStreamingMessages+KeepLastNStreamingMessages {
+		c.messages[c.messageCount] = cm
 	} else {
-		c.lastMessages[c.droppedMessages%uint64(KeepLastNStreamingMessages)] = cm
-		c.droppedMessages++
-		if c.droppedMessages >= 64 {
+		c.messages[KeepFirstNStreamingMessages+((c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages)] = cm
+		if c.messageCount >= 64 {
 			c.huge = true
-			c.lastMessages = nil
 		}
 	}
+	c.messageCount++
+}
+
+func (c *capturedCall) firstMessages() []capturedMessage {
+	if c.messageCount < KeepFirstNStreamingMessages {
+		return c.messages[:c.messageCount]
+	}
+	return c.messages[:KeepFirstNStreamingMessages]
+}
+
+func (c *capturedCall) lastMessages() []capturedMessage {
+	if c.huge || c.messageCount <= KeepFirstNStreamingMessages {
+		return nil
+	}
+	if (c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages == 0 {
+		// We can avoid a copy.
+		return c.messages[KeepFirstNStreamingMessages:]
+	}
+	ret := make([]capturedMessage, KeepLastNStreamingMessages)
+	p := copy(ret, c.messages[KeepFirstNStreamingMessages+((c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages):])
+	copy(ret[p:], c.messages[KeepLastNStreamingMessages:])
+	return ret
+}
+
+func (c *capturedCall) droppedMessages() uint64 {
+	if c.messageCount <= KeepFirstNStreamingMessages+KeepLastNStreamingMessages {
+		return 0
+	}
+	return c.messageCount - KeepFirstNStreamingMessages + KeepLastNStreamingMessages
 }
 
 func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
@@ -158,7 +195,7 @@ func UnaryClientInterceptor(ctx context.Context, method string, req, reply inter
 	if !sampleCall(method) {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	c := &capturedCall{}
+	c := capturedCallPool.Get().(*capturedCall)
 	c.Start(ctx, req)
 	c.Record(method)
 	var p peer.Peer
@@ -172,9 +209,8 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	if !sampleCall(info.FullMethod) {
 		return handler(ctx, req)
 	}
-	c := &capturedCall{
-		inbound: true,
-	}
+	c := capturedCallPool.Get().(*capturedCall)
+	c.inbound = true
 	if p, ok := peer.FromContext(ctx); ok {
 		c.peer = p.Addr
 	}

@@ -142,9 +142,11 @@ func handler(r *http.Request) convreq.HttpResponse {
 			if c == nil {
 				continue
 			}
-			msgs := make([]templateMessage, len(c.messages), len(c.messages)+len(c.lastMessages)+1)
+			firstMessages := c.firstMessages()
+			lastMessages := c.lastMessages()
+			msgs := make([]templateMessage, len(firstMessages), len(firstMessages)+len(lastMessages)+1)
 			prev := c.start
-			for j, msg := range c.messages {
+			for j, msg := range c.firstMessages() {
 				msgs[j] = templateMessage{
 					Inbound:      msg.inbound,
 					Time:         timeToString(now, msg.stamp),
@@ -153,13 +155,12 @@ func handler(r *http.Request) convreq.HttpResponse {
 				}
 				prev = msg.stamp
 			}
-			if c.droppedMessages > 0 {
+			if c.droppedMessages() > 0 {
 				msgs = append(msgs, templateMessage{
-					DroppedMessages: c.droppedMessages,
+					DroppedMessages: c.droppedMessages(),
 				})
 			}
-			for k := 0; len(c.lastMessages) > k; k++ {
-				msg := c.lastMessages[(c.droppedMessages+uint64(k))%uint64(KeepLastNStreamingMessages)]
+			for _, msg := range lastMessages {
 				msgs = append(msgs, templateMessage{
 					Inbound:      msg.inbound,
 					Time:         timeToString(now, msg.stamp),
