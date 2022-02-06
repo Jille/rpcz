@@ -50,9 +50,15 @@ var tpl = template.Must(template.New("").Parse(`
 				</tr>
 {{ range .Messages }}
 				<tr>
+{{ if .DroppedMessages }}
+					<td></td>
+					<td></td>
+					<td><i>{{.DroppedMessages}} message(s) omitted</i></td>
+{{ else }}
 					<td>{{.Time}}</td>
 					<td align="right" title="Time since previous message">({{.TimeFromPrev}})</td>
 					<td>{{if .Inbound}}recv{{else}}sent{{end}}: {{.Message}}</td>
+{{ end }}
 				</tr>
 {{ end }}
 {{ if .Finished }}
@@ -104,6 +110,8 @@ type templateCall struct {
 }
 
 type templateMessage struct {
+	DroppedMessages uint64
+
 	Inbound      bool
 	Time         string
 	TimeFromPrev string
@@ -134,7 +142,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 			if c == nil {
 				continue
 			}
-			msgs := make([]templateMessage, len(c.messages))
+			msgs := make([]templateMessage, len(c.messages), len(c.messages)+len(c.lastMessages)+1)
 			prev := c.start
 			for j, msg := range c.messages {
 				msgs[j] = templateMessage{
@@ -143,6 +151,21 @@ func handler(r *http.Request) convreq.HttpResponse {
 					TimeFromPrev: msg.stamp.Sub(prev).String(),
 					Message:      msg.message,
 				}
+				prev = msg.stamp
+			}
+			if c.droppedMessages > 0 {
+				msgs = append(msgs, templateMessage{
+					DroppedMessages: c.droppedMessages,
+				})
+			}
+			for k := 0; len(c.lastMessages) > k; k++ {
+				msg := c.lastMessages[(c.droppedMessages+uint64(k))%uint64(KeepLastNStreamingMessages)]
+				msgs = append(msgs, templateMessage{
+					Inbound:      msg.inbound,
+					Time:         timeToString(now, msg.stamp),
+					TimeFromPrev: msg.stamp.Sub(prev).String(),
+					Message:      msg.message,
+				})
 				prev = msg.stamp
 			}
 			p := "?"

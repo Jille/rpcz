@@ -15,8 +15,21 @@ import (
 
 var (
 	// SamplingRate is the chance it samples the message.
-	SamplingRate        = 1.0
-	RetainRPCsPerMethod = 10
+	SamplingRate                = 1.0
+	RetainRPCsPerMethod         = 10
+	KeepFirstNStreamingMessages = 5
+	KeepLastNStreamingMessages  = 5
+)
+
+var (
+	ClientOptions = []grpc.DialOption{
+		grpc.WithChainUnaryInterceptor(UnaryClientInterceptor),
+		grpc.WithChainStreamInterceptor(StreamClientInterceptor),
+	}
+	ServerOptions = []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(UnaryServerInterceptor),
+		grpc.ChainStreamInterceptor(StreamServerInterceptor),
+	}
 )
 
 var (
@@ -46,13 +59,15 @@ func (cfm *callForMethod) add(c *capturedCall) {
 }
 
 type capturedCall struct {
-	inbound  bool
-	start    time.Time
-	deadline time.Duration
-	duration time.Duration
-	status   *status.Status
-	peer     net.Addr
-	messages []capturedMessage
+	inbound         bool
+	start           time.Time
+	deadline        time.Duration
+	duration        time.Duration
+	status          *status.Status
+	peer            net.Addr
+	messages        []capturedMessage
+	droppedMessages uint64
+	lastMessages    []capturedMessage
 }
 
 type capturedMessage struct {
@@ -102,11 +117,19 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 	} else {
 		m = fmt.Sprint(msg)
 	}
-	c.messages = append(c.messages, capturedMessage{
+	cm := capturedMessage{
 		inbound: inbound,
 		stamp:   time.Now(),
 		message: m,
-	})
+	}
+	if len(c.messages) < KeepFirstNStreamingMessages {
+		c.messages = append(c.messages, cm)
+	} else if len(c.lastMessages) < KeepLastNStreamingMessages {
+		c.lastMessages = append(c.lastMessages, cm)
+	} else {
+		c.lastMessages[c.droppedMessages%uint64(KeepLastNStreamingMessages)] = cm
+		c.droppedMessages++
+	}
 }
 
 func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
