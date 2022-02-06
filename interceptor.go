@@ -60,6 +60,7 @@ func (cfm *callForMethod) add(c *capturedCall) {
 
 type capturedCall struct {
 	inbound         bool
+	huge            bool
 	start           time.Time
 	deadline        time.Duration
 	duration        time.Duration
@@ -111,6 +112,10 @@ func (c *capturedCall) RecordMessage(msg interface{}, inbound bool) {
 }
 
 func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
+	if c.huge {
+		c.droppedMessages++
+		return
+	}
 	var m string
 	if str, ok := msg.(fmt.Stringer); ok {
 		m = str.String()
@@ -129,6 +134,10 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 	} else {
 		c.lastMessages[c.droppedMessages%uint64(KeepLastNStreamingMessages)] = cm
 		c.droppedMessages++
+		if c.droppedMessages >= 64 {
+			c.huge = true
+			c.lastMessages = nil
+		}
 	}
 }
 
