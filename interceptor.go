@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -72,15 +73,16 @@ func (cfm *callForMethod) add(c *capturedCall) {
 }
 
 type capturedCall struct {
-	inbound      bool
-	huge         bool
-	start        time.Time
-	deadline     time.Duration
-	duration     time.Duration
-	status       *status.Status
-	peer         net.Addr
-	messages     [KeepFirstNStreamingMessages + KeepLastNStreamingMessages]capturedMessage
-	messageCount uint64
+	inbound       bool
+	huge          bool
+	statusCode    codes.Code
+	statusMessage string
+	start         time.Time
+	deadline      time.Duration
+	duration      time.Duration
+	peer          net.Addr
+	messages      [KeepFirstNStreamingMessages + KeepLastNStreamingMessages]capturedMessage
+	messageCount  uint64
 }
 
 type capturedMessage struct {
@@ -185,7 +187,9 @@ func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply i
 		c.recordMessageLocked(reply, !c.inbound)
 	}
 	c.duration = time.Now().Sub(c.start)
-	c.status = status.Convert(err)
+	st := status.Convert(err)
+	c.statusCode = st.Code()
+	c.statusMessage = st.Message()
 	if peer != nil {
 		c.peer = peer
 	}
