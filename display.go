@@ -128,7 +128,8 @@ func handler(r *http.Request) convreq.HttpResponse {
 			Calls: make([]templateCall, 0, RetainRPCsPerMethod),
 		}
 		for i := 0; RetainRPCsPerMethod > i; i++ {
-			c := cfm.calls[(cfm.ptr+i)%RetainRPCsPerMethod]
+			// Reverse order through a ring buffer.
+			c := cfm.calls[(RetainRPCsPerMethod+cfm.ptr-1-i)%RetainRPCsPerMethod]
 			if c == nil {
 				continue
 			}
