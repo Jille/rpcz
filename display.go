@@ -147,9 +147,13 @@ func handler(r *http.Request) convreq.HttpResponse {
 			if c.peer != nil {
 				p = c.peer.String()
 			}
+			dl := c.deadline.String()
+			if c.deadline == 0 {
+				dl = "none"
+			}
 			meth.Calls = append(meth.Calls, templateCall{
 				Start:         timeToString(now, c.start),
-				Deadline:      c.deadline.String(),
+				Deadline:      dl,
 				Duration:      c.duration.String(),
 				End:           timeToString(now, c.start.Add(c.duration)),
 				StatusCode:    c.status.Code().String(),
