@@ -55,7 +55,7 @@ var tpl = template.Must(template.New("").Parse(`
 					<td>{{if .Inbound}}recv{{else}}sent{{end}}: {{.Message}}</td>
 				</tr>
 {{ end }}
-{{ if .Duration }}
+{{ if .Finished }}
 				<tr>
 					<td>{{.End}}</td>
 					<td align="right" title="Total duration of the RPC">({{.Duration}})</td>
@@ -95,6 +95,7 @@ type templateCall struct {
 	End           string
 	Deadline      string
 	Duration      string
+	Finished      bool
 	StatusCode    string
 	StatusMessage string
 	Inbound       bool
@@ -155,6 +156,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 			meth.Calls = append(meth.Calls, templateCall{
 				Start:         timeToString(now, c.start),
 				Deadline:      dl,
+				Finished:      c.duration != 0,
 				Duration:      c.duration.String(),
 				End:           timeToString(now, c.start.Add(c.duration)),
 				StatusCode:    c.status.Code().String(),
