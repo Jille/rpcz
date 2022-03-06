@@ -168,7 +168,7 @@ func (c *capturedCall) lastMessages() []capturedMessage {
 		return c.messages[KeepFirstNStreamingMessages:]
 	}
 	ret := make([]capturedMessage, KeepLastNStreamingMessages)
-	p := copy(ret, c.messages[KeepFirstNStreamingMessages+((c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages):])
+	p := copy(ret, c.messages[KeepFirstNStreamingMessages+((c.messageCount-1-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages):])
 	copy(ret[p:], c.messages[KeepLastNStreamingMessages:])
 	return ret
 }
@@ -177,7 +177,7 @@ func (c *capturedCall) droppedMessages() uint64 {
 	if c.messageCount <= KeepFirstNStreamingMessages+KeepLastNStreamingMessages {
 		return 0
 	}
-	return c.messageCount - KeepFirstNStreamingMessages + KeepLastNStreamingMessages
+	return c.messageCount - KeepFirstNStreamingMessages - KeepLastNStreamingMessages
 }
 
 func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
