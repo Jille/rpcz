@@ -163,11 +163,15 @@ func (c *capturedCall) lastMessages() []capturedMessage {
 	if c.huge || c.messageCount <= KeepFirstNStreamingMessages {
 		return nil
 	}
-	if (c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages == 0 {
-		// We can avoid a copy.
-		return c.messages[KeepFirstNStreamingMessages:]
+	n := uint64(KeepLastNStreamingMessages)
+	if c.messageCount-KeepFirstNStreamingMessages < n {
+		n = c.messageCount - KeepFirstNStreamingMessages
 	}
-	ret := make([]capturedMessage, KeepLastNStreamingMessages)
+	if (c.messageCount-1-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages == 0 {
+		// We can avoid copying.
+		return c.messages[KeepFirstNStreamingMessages : KeepFirstNStreamingMessages+n]
+	}
+	ret := make([]capturedMessage, n)
 	p := copy(ret, c.messages[KeepFirstNStreamingMessages+((c.messageCount-1-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages):])
 	copy(ret[p:], c.messages[KeepLastNStreamingMessages:])
 	return ret
