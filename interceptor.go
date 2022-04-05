@@ -20,11 +20,6 @@ var (
 	RetainRPCsPerMethod = 10
 )
 
-const (
-	KeepFirstNStreamingMessages = 5
-	KeepLastNStreamingMessages  = 5
-)
-
 var (
 	ClientOptions = []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(UnaryClientInterceptor),
@@ -74,15 +69,13 @@ func (cfm *callForMethod) add(c *capturedCall) {
 
 type capturedCall struct {
 	inbound       bool
-	huge          bool
 	statusCode    codes.Code
 	statusMessage string
 	start         time.Time
 	deadline      time.Duration
 	duration      time.Duration
 	peer          net.Addr
-	messages      [KeepFirstNStreamingMessages + KeepLastNStreamingMessages]capturedMessage
-	messageCount  uint64
+	messageBuffer
 }
 
 type capturedMessage struct {
@@ -130,58 +123,22 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 		c.messageCount++
 		return
 	}
+	if c.messageCount >= 64 {
+		c.huge = true
+		c.messageCount++
+		return
+	}
 	var m string
 	if str, ok := msg.(fmt.Stringer); ok {
 		m = str.String()
 	} else {
 		m = fmt.Sprint(msg)
 	}
-	cm := capturedMessage{
+	c.messageBuffer.addMessage(capturedMessage{
 		inbound: inbound,
 		stamp:   time.Now(),
 		message: m,
-	}
-	if c.messageCount < KeepFirstNStreamingMessages+KeepLastNStreamingMessages {
-		c.messages[c.messageCount] = cm
-	} else {
-		c.messages[KeepFirstNStreamingMessages+((c.messageCount-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages)] = cm
-		if c.messageCount >= 64 {
-			c.huge = true
-		}
-	}
-	c.messageCount++
-}
-
-func (c *capturedCall) firstMessages() []capturedMessage {
-	if c.messageCount < KeepFirstNStreamingMessages {
-		return c.messages[:c.messageCount]
-	}
-	return c.messages[:KeepFirstNStreamingMessages]
-}
-
-func (c *capturedCall) lastMessages() []capturedMessage {
-	if c.huge || c.messageCount <= KeepFirstNStreamingMessages {
-		return nil
-	}
-	n := uint64(KeepLastNStreamingMessages)
-	if c.messageCount-KeepFirstNStreamingMessages < n {
-		n = c.messageCount - KeepFirstNStreamingMessages
-	}
-	if (c.messageCount-1-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages == 0 {
-		// We can avoid copying.
-		return c.messages[KeepFirstNStreamingMessages : KeepFirstNStreamingMessages+n]
-	}
-	ret := make([]capturedMessage, n)
-	p := copy(ret, c.messages[KeepFirstNStreamingMessages+((c.messageCount-1-KeepFirstNStreamingMessages)%KeepLastNStreamingMessages):])
-	copy(ret[p:], c.messages[KeepLastNStreamingMessages:])
-	return ret
-}
-
-func (c *capturedCall) droppedMessages() uint64 {
-	if c.messageCount <= KeepFirstNStreamingMessages+KeepLastNStreamingMessages {
-		return 0
-	}
-	return c.messageCount - KeepFirstNStreamingMessages - KeepLastNStreamingMessages
+	})
 }
 
 func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
