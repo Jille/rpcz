@@ -34,12 +34,6 @@ var (
 var (
 	mtx       sync.Mutex
 	perMethod = map[string]*callForMethod{}
-
-	capturedCallPool = sync.Pool{
-		New: func() interface{} {
-			return &capturedCall{}
-		},
-	}
 )
 
 func sampleCall(method string) bool {
@@ -59,10 +53,6 @@ type callForMethod struct {
 
 // Callers should hold mtx.
 func (cfm *callForMethod) add(c *capturedCall) {
-	if old := cfm.calls[cfm.ptr]; old != nil {
-		*old = capturedCall{}
-		capturedCallPool.Put(old)
-	}
 	cfm.calls[cfm.ptr] = c
 	cfm.ptr = (cfm.ptr + 1) % RetainRPCsPerMethod
 }
@@ -160,7 +150,7 @@ func UnaryClientInterceptor(ctx context.Context, method string, req, reply inter
 	if !sampleCall(method) {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	c := capturedCallPool.Get().(*capturedCall)
+	c := &capturedCall{}
 	c.Start(ctx, req)
 	c.Record(method)
 	var p peer.Peer
@@ -174,7 +164,7 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	if !sampleCall(info.FullMethod) {
 		return handler(ctx, req)
 	}
-	c := capturedCallPool.Get().(*capturedCall)
+	c := &capturedCall{}
 	c.inbound = true
 	if p, ok := peer.FromContext(ctx); ok {
 		c.peer = p.Addr

@@ -13,7 +13,7 @@ func StreamClientInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grp
 	if !sampleCall(method) {
 		return streamer(ctx, desc, cc, method, opts...)
 	}
-	c := capturedCallPool.Get().(*capturedCall)
+	c := &capturedCall{}
 	c.Start(ctx, nil)
 	c.Record(method)
 	// TODO: How can we get the Peer? Both peer.FromContext() and grpc.Peer() don't seem to work here.
@@ -72,7 +72,7 @@ func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.S
 	if !sampleCall(info.FullMethod) {
 		return handler(srv, ss)
 	}
-	c := capturedCallPool.Get().(*capturedCall)
+	c := &capturedCall{}
 	c.inbound = true
 	if p, ok := peer.FromContext(ss.Context()); ok {
 		c.peer = p.Addr
