@@ -10,6 +10,7 @@ import (
 	"github.com/Jille/convreq"
 	"github.com/Jille/convreq/respond"
 	"github.com/Jille/dfr"
+	"google.golang.org/grpc/metadata"
 )
 
 var Handler http.Handler = convreq.Wrap(handler)
@@ -46,7 +47,13 @@ var tpl = template.Must(template.New("").Parse(`
 				<tr>
 					<td>{{.Start}}</td>
 					<td></td>
-					<td><b>{{if .Inbound}}Caller{{else}}Recipient{{end}}</b>: {{if .Peer}}{{.Peer}}{{else}}?{{end}}  <b>Deadline</b>: {{.Deadline}}</td>
+					<td>
+						<b>{{if .Inbound}}Caller{{else}}Recipient{{end}}</b>: {{if .Peer}}{{.Peer}}{{else}}?{{end}}
+						<b>Deadline</b>: {{.Deadline}}
+{{ range $k, $v := .Metadata }}
+							<i>{{$k}}</i>: {{$v}}
+{{ end }}
+					</td>
 				</tr>
 {{ range .Messages }}
 				<tr>
@@ -106,6 +113,7 @@ type templateCall struct {
 	StatusMessage string
 	Inbound       bool
 	Peer          string
+	Metadata      metadata.MD
 	Messages      []templateMessage
 }
 
@@ -187,6 +195,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 				StatusMessage: c.statusMessage,
 				Inbound:       c.inbound,
 				Peer:          p,
+				Metadata:      c.metadata,
 				Messages:      msgs,
 			})
 		}

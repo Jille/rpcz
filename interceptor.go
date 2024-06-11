@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -18,6 +19,7 @@ var (
 	// SamplingRate is the chance it samples the message.
 	SamplingRate        = 1.0
 	RetainRPCsPerMethod = 10
+	RecordMetadata      = true
 )
 
 var (
@@ -65,6 +67,7 @@ type capturedCall struct {
 	deadline      time.Duration
 	duration      time.Duration
 	peer          net.Addr
+	metadata      metadata.MD
 	messageBuffer
 }
 
@@ -74,11 +77,12 @@ type capturedMessage struct {
 	message string
 }
 
-func (c *capturedCall) Start(ctx context.Context, req interface{}) {
+func (c *capturedCall) Start(ctx context.Context, md metadata.MD, req interface{}) {
 	c.start = time.Now()
 	if dl, ok := ctx.Deadline(); ok {
 		c.deadline = dl.Sub(c.start)
 	}
+	c.metadata = md
 	if req != nil {
 		c.recordMessageLocked(req, c.inbound)
 	}
@@ -151,7 +155,7 @@ func UnaryClientInterceptor(ctx context.Context, method string, req, reply inter
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 	c := &capturedCall{}
-	c.Start(ctx, req)
+	c.Start(ctx, metadataFromOutgoingContext(ctx), req)
 	c.Record(method)
 	var p peer.Peer
 	opts = append(opts, grpc.Peer(&p))
@@ -169,9 +173,26 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	if p, ok := peer.FromContext(ctx); ok {
 		c.peer = p.Addr
 	}
-	c.Start(ctx, req)
+	c.Start(ctx, metadataFromIncomingContext(ctx), req)
 	c.Record(info.FullMethod)
 	resp, err := handler(ctx, req)
 	c.Complete(err, nil, err == nil, resp)
 	return resp, err
+}
+
+func metadataFromIncomingContext(ctx context.Context) metadata.MD {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		return md
+	}
+	return nil
+}
+
+func metadataFromOutgoingContext(ctx context.Context) metadata.MD {
+	if !RecordMetadata {
+		return nil
+	}
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		return md
+	}
+	return nil
 }
