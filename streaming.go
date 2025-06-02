@@ -16,11 +16,15 @@ func StreamClientInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grp
 	c := &capturedCall{}
 	c.Start(ctx, metadataFromOutgoingContext(ctx), nil)
 	c.Record(method)
-	// TODO: How can we get the Peer? Both peer.FromContext() and grpc.Peer() don't seem to work here.
+	var p peer.Peer
+	opts = append(opts, grpc.Peer(&p))
 	stream, err := streamer(ctx, desc, cc, method, opts...)
 	if err != nil {
-		c.Complete(err, nil, false, nil)
+		c.Complete(err, p.Addr, false, nil)
 		return stream, err
+	}
+	if p, ok := peer.FromContext(stream.Context()); ok { // grpc.Peer() will only fill p after the entire call completes, so we have to fetch it from the context here.
+		c.SetPeer(p.Addr)
 	}
 	return &clientStream{stream, c}, nil
 }

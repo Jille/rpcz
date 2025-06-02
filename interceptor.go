@@ -135,6 +135,12 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 	})
 }
 
+func (c *capturedCall) SetPeer(peer net.Addr) {
+	mtx.Lock()
+	defer mtx.Unlock()
+	c.peer = peer
+}
+
 func (c *capturedCall) Complete(err error, peer net.Addr, addReply bool, reply interface{}) {
 	mtx.Lock()
 	defer mtx.Unlock()
