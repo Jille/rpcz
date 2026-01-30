@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 var (
@@ -72,9 +74,10 @@ type capturedCall struct {
 }
 
 type capturedMessage struct {
-	inbound bool
-	stamp   time.Time
-	message string
+	stamp       time.Time
+	data        []byte
+	messageType protoreflect.MessageDescriptor
+	inbound     bool
 }
 
 func (c *capturedCall) Start(ctx context.Context, md metadata.MD, req interface{}) {
@@ -122,17 +125,24 @@ func (c *capturedCall) recordMessageLocked(msg interface{}, inbound bool) {
 		c.messageCount++
 		return
 	}
-	var m string
-	if str, ok := msg.(fmt.Stringer); ok {
-		m = str.String()
-	} else {
-		m = fmt.Sprint(msg)
-	}
-	c.messageBuffer.addMessage(capturedMessage{
-		inbound: inbound,
+	cm := capturedMessage{
 		stamp:   time.Now(),
-		message: m,
-	})
+		inbound: inbound,
+	}
+	if pm, ok := msg.(proto.Message); ok {
+		b, err := proto.Marshal(pm)
+		if err != nil {
+			cm.data = []byte("[Failed to encode protobuf: " + err.Error() + "]")
+		} else {
+			cm.data = b
+			cm.messageType = pm.ProtoReflect().Descriptor()
+		}
+	} else if str, ok := msg.(fmt.Stringer); ok {
+		cm.data = []byte(str.String())
+	} else {
+		cm.data = fmt.Append(nil, msg)
+	}
+	c.messageBuffer.addMessage(cm)
 }
 
 func (c *capturedCall) SetPeer(peer net.Addr) {

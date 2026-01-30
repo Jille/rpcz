@@ -10,7 +10,10 @@ import (
 	"github.com/Jille/convreq"
 	"github.com/Jille/convreq/respond"
 	"github.com/Jille/dfr"
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 var Handler http.Handler = convreq.Wrap(handler)
@@ -159,7 +162,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 					Inbound:      msg.inbound,
 					Time:         timeToString(now, msg.stamp),
 					TimeFromPrev: msg.stamp.Sub(prev).String(),
-					Message:      msg.message,
+					Message:      renderMessageData(msg),
 				}
 				prev = msg.stamp
 			}
@@ -173,7 +176,7 @@ func handler(r *http.Request) convreq.HttpResponse {
 					Inbound:      msg.inbound,
 					Time:         timeToString(now, msg.stamp),
 					TimeFromPrev: msg.stamp.Sub(prev).String(),
-					Message:      msg.message,
+					Message:      renderMessageData(msg),
 				})
 				prev = msg.stamp
 			}
@@ -214,4 +217,15 @@ func timeToString(now, t time.Time) string {
 		return t.Format("15:04:05.000000000")
 	}
 	return t.Format("2006-01-02 15:04:05.000000000")
+}
+
+func renderMessageData(cm capturedMessage) string {
+	if cm.messageType == nil {
+		return string(cm.data)
+	}
+	m := dynamicpb.NewMessage(cm.messageType)
+	if err := proto.Unmarshal(cm.data, m); err != nil {
+		return "[Failed to decode binary proto: " + err.Error() + "]"
+	}
+	return prototext.Format(m)
 }
